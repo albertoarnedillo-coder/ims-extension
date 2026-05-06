@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 *)",
+      "Bash(pip3 install *)",
+      "Bash(pip install *)",
+      "Bash(sudo apt-get install -y python3-pil)",
+      "Bash(~/.local/bin/pip install *)",
+      "Bash(gcloud auth *)",
+      "Bash(openssl version *)",
+      "Read(//tmp/**)",
+      "Bash(openssl genrsa *)",
+      "Bash(openssl rsa *)",
+      "Bash(cp /home/alberto/ims-extension/manifest.json \"/mnt/c/Users/Oscar Arnedillo/Documents/Startups/IMS InternetMailStamp/ims-extension/manifest.json\")",
+      "Bash(cp /tmp/ims_ext.pem \"/mnt/c/Users/Oscar Arnedillo/Documents/Startups/IMS InternetMailStamp/ims-extension.pem\")",
+      "Bash(cp /tmp/ims_ext.pem /home/alberto/ims-extension.pem)"
+    ]
+  }
+}

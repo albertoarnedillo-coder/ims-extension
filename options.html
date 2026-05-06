@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IMS Settings</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --navy: #1B3A5C;
+      --navy-dark: #132C46;
+      --navy-light: #254e7a;
+      --orange: #FF6B35;
+      --orange-dark: #e55a25;
+      --text: #1a1a2e;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --bg: #f9fafb;
+      --white: #ffffff;
+      --radius: 10px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* Header */
+    header {
+      background: var(--navy);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-stamp {
+      font-size: 26px;
+      background: var(--orange);
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-title {
+      color: white;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .logo-sub {
+      color: rgba(255,255,255,0.55);
+      font-size: 12px;
+    }
+
+    /* Layout */
+    main {
+      max-width: 680px;
+      margin: 40px auto;
+      padding: 0 24px 60px;
+    }
+
+    .section {
+      background: var(--white);
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+
+    .section-header {
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    .section-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .section-body {
+      padding: 20px;
+    }
+
+    /* Field rows */
+    .field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .field:last-child { border-bottom: none; }
+
+    .field-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .field-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Price input */
+    .price-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .price-symbol {
+      font-size: 16px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .price-input {
+      width: 72px;
+      padding: 7px 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--navy);
+      text-align: center;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .price-input:focus {
+      border-color: var(--navy);
+    }
+
+    /* Toggle */
+    .toggle-wrap {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .toggle-wrap input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: #d1d5db;
+      border-radius: 24px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      background: white;
+      border-radius: 50%;
+      top: 3px;
+      left: 3px;
+      transition: transform 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+
+    .toggle-wrap input:checked + .toggle-track {
+      background: var(--orange);
+    }
+
+    .toggle-wrap input:checked + .toggle-track::after {
+      transform: translateX(20px);
+    }
+
+    /* Whitelist */
+    .whitelist-add {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .whitelist-input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+      color: var(--text);
+    }
+
+    .whitelist-input:focus {
+      border-color: var(--navy);
+    }
+
+    .btn-add {
+      padding: 8px 16px;
+      background: var(--navy);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-add:hover { background: var(--navy-light); }
+
+    .whitelist-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .whitelist-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+
+    .whitelist-email {
+      color: var(--text);
+      font-family: monospace;
+    }
+
+    .btn-remove {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0 4px;
+      transition: color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .btn-remove:hover { color: #dc2626; }
+
+    .whitelist-empty {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 16px 0;
+    }
+
+    /* Save bar */
+    .save-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: var(--white);
+      border-top: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .save-status {
+      font-size: 13px;
+      color: #16a34a;
+      font-weight: 500;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .save-status.visible { opacity: 1; }
+
+    .btn-save {
+      padding: 9px 24px;
+      background: var(--orange);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-save:hover { background: var(--orange-dark); }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-stamp">✉</div>
+    <div>
+      <div class="logo-title">InternetMailStamp</div>
+      <div class="logo-sub">Settings</div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Stamp pricing -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">Stamp Pricing</div>
+        <div class="section-desc">Set how much senders must pay to reach your inbox</div>
+      </div>
+      <div class="section-body">
+        <div class="field">
+          <div>
+            <div class="field-label">Price per stamp</div>
+            <div class="field-hint">Amount charged to unknown senders</div>
+          </div>
+          <div class="price-wrap">
+            <span class="price-symbol">€</span>
+            <input type="number" id="price-input" class="price-input"
+              min="0.10" max="100" step="0.10" value="1.00" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charity -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">Charity Donation</div>
+        <div class="section-desc">Automatically donate a portion of stamp revenue to charity</div>
+      </div>
+      <div class="section-body">
+        <div class="field">
+          <div>
+            <div class="field-label">Enable charity donations</div>
+            <div class="field-hint">10% of all stamp proceeds go to your chosen charity</div>
+          </div>
+          <label class="toggle-wrap">
+            <input type="checkbox" id="charity-toggle" />
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="field" id="charity-select-row" style="display:none">
+          <div>
+            <div class="field-label">Charity</div>
+            <div class="field-hint">Choose which charity receives donations</div>
+          </div>
+          <select id="charity-select" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;color:var(--navy);outline:none;">
+            <option value="effective-altruism">Effective Altruism Fund</option>
+            <option value="msf">Médecins Sans Frontières</option>
+            <option value="wwf">WWF</option>
+            <option value="unicef">UNICEF</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Whitelist -->
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">Whitelist</div>
+        <div class="section-desc">Emails and domains that bypass the stamp requirement</div>
+      </div>
+      <div class="section-body">
+        <div class="whitelist-add">
+          <input type="text" id="whitelist-input" class="whitelist-input"
+            placeholder="email@example.com or @domain.com" />
+          <button id="btn-add-whitelist" class="btn-add">Add</button>
+        </div>
+        <ul id="whitelist-list" class="whitelist-list">
+          <!-- Items injected by JS -->
+        </ul>
+        <p id="whitelist-empty" class="whitelist-empty hidden">No whitelisted addresses yet</p>
+      </div>
+    </div>
+
+  </main>
+
+  <div class="save-bar">
+    <span id="save-status" class="save-status">Settings saved</span>
+    <button id="btn-save" class="btn-save">Save Settings</button>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

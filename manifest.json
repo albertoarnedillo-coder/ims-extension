@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "InternetMailStamp",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvCZpJ+mxZQfHflcoPKTH3Hz5W3LROP/tWnJX3UbDyGWnN3+tR4bss++9wt3qkWMu+s8WDzg8E78DbFbFqYW5OuGYUQerY5wghJtR8WK8V0JVg8HtitlqgUkKkH6cYwoHerSckBhaB1g4nivxF//2+Ory9eEGEsm0A4PlC8oLdzTQtmQVFiHexFHNXbnkB90Pht7YLf8q1yJqmzd+og8o6rXh6GsWonfoQyZ7AqkOrvS6bRaJo+QF57egZFZJUQL7ZpXdwY1HuZwKMGeJgEgSuesuwHBM0S7KAnSJReIm8rVfyS11pEzdLHlA9mtKZHc6TtMHfcbiZnr+N7Y469v+WQIDAQAB",
+  "version": "0.1.0",
+  "description": "Digital stamps for email \u2014 control who reaches your inbox",
+  "permissions": [
+    "storage",
+    "identity",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://mail.google.com/*",
+    "https://www.googleapis.com/*",
+    "http://localhost:3000/*"
+  ],
+  "oauth2": {
+    "client_id": "113835763265-2040ue2jspeaat2vqdvk1urakmpiftj7.apps.googleusercontent.com",
+    "scopes": [
+      "openid",
+      "email",
+      "profile"
+    ]
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://mail.google.com/*"
+      ],
+      "js": [
+        "content.js"
+      ]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "options.html"
+}
