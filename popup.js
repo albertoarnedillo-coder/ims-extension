@@ -28,7 +28,7 @@ async function login() {
       + '?client_id='    + encodeURIComponent(clientId)
       + '&response_type=code'
       + '&redirect_uri=' + encodeURIComponent(redirectUri)
-      + '&scope='        + encodeURIComponent('openid email profile')
+      + '&scope='        + encodeURIComponent('openid email profile https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/contacts.readonly')
       + '&access_type=offline'
       + '&prompt=consent';
 
