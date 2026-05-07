@@ -47,17 +47,22 @@
         <span id="stat-credits" class="stat-value">—</span>
         <span class="stat-unit">stamps</span>
       </div>
-      <div class="stat-card stat-card--orange">
-        <span class="stat-label">Intercepted</span>
-        <span id="stat-intercepted" class="stat-value">—</span>
-        <span class="stat-unit">emails</span>
+      <div class="stat-card">
+        <span class="stat-label">Unknown</span>
+        <span id="stat-unknown" class="stat-value stat-value--warn">—</span>
+        <span class="stat-unit">senders</span>
+      </div>
+      <div class="stat-card stat-card--alert">
+        <span class="stat-label">Suspicious</span>
+        <span id="stat-suspicious" class="stat-value stat-value--alert">—</span>
+        <span class="stat-unit">flagged</span>
       </div>
     </div>
 
     <div class="actions">
-      <button id="btn-check" class="btn-primary">
-        <span id="check-spinner" class="spinner hidden"></span>
-        Check Now
+      <button id="btn-scan" class="btn-primary">
+        <span id="scan-spinner" class="spinner hidden"></span>
+        Scan Inbox
       </button>
       <button id="btn-options" class="btn-secondary">Settings</button>
     </div>
@@ -65,7 +70,7 @@
     <div class="footer-actions">
       <button id="btn-logout" class="btn-link">Sign out</button>
       <span class="dot-sep">·</span>
-      <a href="http://localhost:3000" target="_blank" class="btn-link">Dashboard</a>
+      <button id="btn-buy" class="btn-link btn-link--orange">Buy credits</button>
     </div>
   </section>
 

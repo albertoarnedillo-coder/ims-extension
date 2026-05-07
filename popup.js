@@ -1,9 +1,10 @@
 const API_BASE = 'http://172.20.149.114:3000/api';
 
+// ─── View management ──────────────────────────────────────────────────────────
 const views = {
   loading: document.getElementById('view-loading'),
-  login: document.getElementById('view-login'),
-  main: document.getElementById('view-main'),
+  login:   document.getElementById('view-login'),
+  main:    document.getElementById('view-main'),
 };
 
 function showView(name) {
@@ -11,156 +12,149 @@ function showView(name) {
   views[name].classList.remove('hidden');
 }
 
-async function getStoredData(keys) {
-  return new Promise(resolve => chrome.storage.local.get(keys, resolve));
+// ─── Background messaging ──────────────────────────────────────────────────────
+function bgMessage(msg) {
+  return new Promise(resolve => chrome.runtime.sendMessage(msg, resolve));
 }
 
-async function setStoredData(data) {
-  return new Promise(resolve => chrome.storage.local.set(data, resolve));
-}
-
+// ─── Login flow ───────────────────────────────────────────────────────────────
 async function login() {
   const errorEl = document.getElementById('login-error');
   errorEl.classList.add('hidden');
 
-  let oauthToken;
+  // 1. Get Google auth code via Chrome identity
+  let code;
   try {
-    const manifest = chrome.runtime.getManifest();
-    const clientId = "113835763265-ptv5hp61pc02re7asuad015mebgr4m91.apps.googleusercontent.com";
-    const scopes = manifest.oauth2.scopes.join(' ');
+    const clientId    = '113835763265-ptv5hp61pc02re7asuad015mebgr4m91.apps.googleusercontent.com';
     const redirectUri = chrome.identity.getRedirectURL();
-    const authUrl = 'https://accounts.google.com/o/oauth2/auth' +
-      '?client_id=' + encodeURIComponent(clientId) +
-      '&response_type=code' +
-      '&redirect_uri=' + encodeURIComponent(redirectUri) +
-      '&scope=' + encodeURIComponent(scopes);
+    const authUrl     = 'https://accounts.google.com/o/oauth2/auth'
+      + '?client_id='    + encodeURIComponent(clientId)
+      + '&response_type=code'
+      + '&redirect_uri=' + encodeURIComponent(redirectUri)
+      + '&scope='        + encodeURIComponent('openid email profile')
+      + '&access_type=offline'
+      + '&prompt=consent';
+
     const responseUrl = await new Promise((resolve, reject) => {
       chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, url => {
         if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
         else resolve(url);
       });
     });
+
     const params = new URLSearchParams(new URL(responseUrl).search);
-    oauthToken = params.get('code');
-    if (!oauthToken) throw new Error('No authorization code received');
-  } catch (err) {
+    code = params.get('code');
+    if (!code) throw new Error('No authorization code');
+  } catch {
     errorEl.textContent = 'Google sign-in was cancelled or failed.';
     errorEl.classList.remove('hidden');
     return;
   }
 
+  // 2. Exchange code for IMS tokens
   try {
     const res = await fetch(`${API_BASE}/auth/google`, {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: oauthToken, redirectUri: chrome.identity.getRedirectURL() }),
+      body:    JSON.stringify({ code, redirectUri: chrome.identity.getRedirectURL() }),
     });
-
     if (!res.ok) throw new Error(`Server error: ${res.status}`);
-    const { accessToken: token, user } = await res.json();
-    await setStoredData({ token, user });
+
+    const { accessToken, refreshToken, user } = await res.json();
+
+    // Store in background service worker
+    await bgMessage({ type: 'LOGIN', accessToken, refreshToken, user });
+
     await renderMain(user);
-  } catch (err) {
+  } catch {
     errorEl.textContent = 'Could not connect to IMS backend. Is the server running?';
     errorEl.classList.remove('hidden');
   }
 }
 
+// ─── Logout ───────────────────────────────────────────────────────────────────
 async function logout() {
-  await new Promise(resolve => chrome.storage.local.remove(['token', 'user'], resolve));
-  chrome.runtime.sendMessage({ type: 'LOGOUT' });
+  await bgMessage({ type: 'LOGOUT' });
   showView('login');
 }
 
-async function fetchUserStatus(token) {
-  const res = await fetch(`${API_BASE}/users/me`, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error('Unauthorized');
-  return res.json();
-}
-
+// ─── Main view ────────────────────────────────────────────────────────────────
 async function renderMain(user) {
   showView('main');
 
-  const nameEl = document.getElementById('user-name');
+  // Render name + avatar immediately from stored user object
+  document.getElementById('user-name').textContent = user?.name || user?.email || 'User';
   const avatarEl = document.getElementById('user-avatar');
-  nameEl.textContent = user?.name || user?.email || 'User';
-  if (user?.picture) {
-    avatarEl.src = user.picture;
-    avatarEl.alt = user.name || '';
+  if (user?.avatar_url || user?.picture) {
+    avatarEl.src = user.avatar_url || user.picture;
+    avatarEl.alt = user?.name || '';
   }
 
-  const { token } = await getStoredData(['token']);
-  if (!token) { showView('login'); return; }
-
-  try {
-    const status = await fetchUserStatus(token);
-    document.getElementById('stat-credits').textContent = status.credits ?? 0;
-    document.getElementById('stat-intercepted').textContent = status.intercepted ?? 0;
-  } catch {
-    document.getElementById('stat-credits').textContent = '—';
-    document.getElementById('stat-intercepted').textContent = '—';
-  }
+  await loadStats();
 }
 
-async function handleCheckNow() {
-  const btn = document.getElementById('btn-check');
-  const spinner = document.getElementById('check-spinner');
-  btn.disabled = true;
+async function loadStats() {
+  // Dashboard gives us everything in one call
+  const dash = await bgMessage({ type: 'GET_DASHBOARD' });
+  if (!dash) return;
+
+  document.getElementById('stat-credits').textContent    = dash.credits?.balance ?? '—';
+  document.getElementById('stat-unknown').textContent    = dash.contacts?.unknown ?? '—';
+  document.getElementById('stat-suspicious').textContent = dash.contacts?.suspicious ?? '—';
+}
+
+// ─── Scan inbox ───────────────────────────────────────────────────────────────
+async function scanInbox() {
+  const btn     = document.getElementById('btn-scan');
+  const spinner = document.getElementById('scan-spinner');
+  btn.disabled  = true;
   spinner.classList.remove('hidden');
 
-  await new Promise(resolve =>
-    chrome.runtime.sendMessage({ type: 'CHECK_NOW' }, resolve)
-  );
-
-  // Refresh stats after check
-  const { token, user } = await getStoredData(['token', 'user']);
-  if (token) {
-    try {
-      const status = await fetchUserStatus(token);
-      document.getElementById('stat-credits').textContent = status.credits ?? 0;
-      document.getElementById('stat-intercepted').textContent = status.intercepted ?? 0;
-    } catch { /* ignore */ }
-  }
+  const result = await bgMessage({ type: 'SCAN_INBOX' });
+  await loadStats();
 
   spinner.classList.add('hidden');
   btn.disabled = false;
+
+  if (result) {
+    btn.textContent = `Scanned ${result.scanned ?? '?'} emails`;
+    setTimeout(() => {
+      btn.innerHTML = '';
+      const sp = document.createElement('span');
+      sp.id = 'scan-spinner';
+      sp.className = 'spinner hidden';
+      btn.appendChild(sp);
+      btn.appendChild(document.createTextNode('Scan Inbox'));
+    }, 2500);
+  }
 }
 
+// ─── Buy credits ─────────────────────────────────────────────────────────────
+async function buyCredits() {
+  await bgMessage({ type: 'PURCHASE_CREDITS', packageId: 'starter' });
+  // Background opens the Stripe checkout URL in a new tab
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   showView('loading');
-  const errorEl = document.getElementById('login-error');
-  if (errorEl) errorEl.classList.add('hidden');
+  document.getElementById('login-error').classList.add('hidden');
 
-  const { token, user } = await getStoredData(['token', 'user']);
+  const { authenticated, user } = await bgMessage({ type: 'GET_AUTH_STATUS' });
 
-  if (!token) {
+  if (!authenticated) {
     showView('login');
     return;
   }
 
-  // Verify token is still valid
-  try {
-    const status = await fetchUserStatus(token);
-    await renderMain(user);
-    document.getElementById('stat-credits').textContent = status.credits ?? 0;
-    document.getElementById('stat-intercepted').textContent = status.intercepted ?? 0;
-  } catch {
-    // Token expired — clear and show login
-    await new Promise(resolve => chrome.storage.local.remove(['token', 'user'], resolve));
-    const errorEl = document.getElementById('login-error');
-    if (errorEl) errorEl.classList.add('hidden');
-    showView('login');
-  }
+  await renderMain(user);
 }
 
-// Event listeners
+// ─── Event listeners ──────────────────────────────────────────────────────────
 document.getElementById('btn-login').addEventListener('click', login);
 document.getElementById('btn-logout').addEventListener('click', logout);
-document.getElementById('btn-check').addEventListener('click', handleCheckNow);
-document.getElementById('btn-options').addEventListener('click', () => {
-  chrome.runtime.openOptionsPage();
-});
+document.getElementById('btn-scan').addEventListener('click', scanInbox);
+document.getElementById('btn-options').addEventListener('click', () => chrome.runtime.openOptionsPage());
+document.getElementById('btn-buy').addEventListener('click', buyCredits);
 
 init();

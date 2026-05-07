@@ -1,72 +1,142 @@
 const API_BASE = 'http://172.20.149.114:3000/api';
-const CHECK_INTERVAL_MINUTES = 5;
 
-// On install, set up alarm for periodic email checking
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.alarms.create('checkEmails', { periodInMinutes: CHECK_INTERVAL_MINUTES });
-  console.log('IMS Extension installed');
-});
+// ─── Storage ──────────────────────────────────────────────────────────────────
+function store(data)  { return new Promise(r => chrome.storage.local.set(data, r)); }
+function load(keys)   { return new Promise(r => chrome.storage.local.get(keys, r)); }
+function clear(keys)  { return new Promise(r => chrome.storage.local.remove(keys, r)); }
 
-// Main alarm handler
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === 'checkEmails') {
-    checkNewEmails();
-  }
-});
+// ─── API client with auto-refresh ─────────────────────────────────────────────
+async function apiRequest(method, path, body, _retry = true) {
+  const { accessToken, refreshToken } = await load(['accessToken', 'refreshToken']);
+  if (!accessToken) return null;
 
-// Get stored auth token
-async function getAuthToken() {
-  return new Promise((resolve) => {
-    chrome.storage.local.get(['token'], (result) => {
-      resolve(result.token || null);
-    });
-  });
-}
-
-// Check new emails via backend
-async function checkNewEmails() {
-  const token = await getAuthToken();
-  if (!token) return;
-
+  let res;
   try {
-    const response = await fetch(`${API_BASE}/gmail/status`, {
-      method: 'POST',
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type':  'application/json',
+      },
+      body: body ? JSON.stringify(body) : undefined,
     });
+  } catch { return null; }
 
-    if (response.ok) {
-      const data = await response.json();
-      if (data.intercepted > 0) {
-        chrome.action.setBadgeText({ text: String(data.intercepted) });
-        chrome.action.setBadgeBackgroundColor({ color: '#FF6B35' });
-      }
-    }
-  } catch (err) {
-    console.error('IMS check error:', err);
+  if (res.status === 401 && _retry && refreshToken) {
+    const ok = await doRefresh(refreshToken);
+    if (ok) return apiRequest(method, path, body, false);
+    await clear(['accessToken', 'refreshToken', 'user']);
+    return null;
+  }
+
+  if (!res.ok) return null;
+  return res.json().catch(() => null);
+}
+
+async function doRefresh(refreshToken) {
+  try {
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return false;
+    const { accessToken } = await res.json();
+    await store({ accessToken });
+    return true;
+  } catch { return false; }
+}
+
+// ─── Badge (shows suspicious sender count) ────────────────────────────────────
+async function updateBadge() {
+  const { accessToken } = await load(['accessToken']);
+  if (!accessToken) { chrome.action.setBadgeText({ text: '' }); return; }
+
+  const data = await apiRequest('GET', '/contacts/summary');
+  if (data?.suspicious > 0) {
+    chrome.action.setBadgeText({ text: String(data.suspicious) });
+    chrome.action.setBadgeBackgroundColor({ color: '#FF6B35' });
+  } else {
+    chrome.action.setBadgeText({ text: '' });
   }
 }
 
-// Listen for messages from popup and content script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'GET_STATUS') {
-    getAuthToken().then(token => {
-      sendResponse({ authenticated: !!token });
-    });
-    return true;
-  }
-
-  if (message.type === 'LOGOUT') {
-    chrome.storage.local.remove(['token', 'user']);
-    chrome.action.setBadgeText({ text: '' });
-    sendResponse({ success: true });
-    return true;
-  }
-
-  if (message.type === 'CHECK_NOW') {
-    checkNewEmails().then(() => sendResponse({ success: true }));
-    return true;
-  }
+// ─── Alarms ───────────────────────────────────────────────────────────────────
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.alarms.create('updateBadge', { periodInMinutes: 5 });
 });
+
+chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name === 'updateBadge') updateBadge();
+});
+
+// ─── Message hub ─────────────────────────────────────────────────────────────
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  handleMessage(msg)
+    .then(sendResponse)
+    .catch(() => sendResponse(null));
+  return true; // keep channel open for async
+});
+
+async function handleMessage(msg) {
+  switch (msg.type) {
+
+    case 'GET_AUTH_STATUS': {
+      const { accessToken, user } = await load(['accessToken', 'user']);
+      return { authenticated: !!accessToken, user: user ?? null };
+    }
+
+    case 'LOGIN': {
+      await store({
+        accessToken:  msg.accessToken,
+        refreshToken: msg.refreshToken,
+        user:         msg.user,
+      });
+      updateBadge();
+      return { success: true };
+    }
+
+    case 'LOGOUT': {
+      const { refreshToken } = await load(['refreshToken']);
+      if (refreshToken) {
+        apiRequest('POST', '/auth/logout', { refreshToken }).catch(() => {});
+      }
+      await clear(['accessToken', 'refreshToken', 'user']);
+      chrome.action.setBadgeText({ text: '' });
+      return { success: true };
+    }
+
+    case 'GET_DASHBOARD':
+      return apiRequest('GET', '/dashboard');
+
+    case 'GET_CREDITS':
+      return apiRequest('GET', '/credits');
+
+    case 'GET_CONTACTS_SUMMARY':
+      return apiRequest('GET', '/contacts/summary');
+
+    case 'CLASSIFY_SENDERS': {
+      const emails = msg.emails;
+      if (!emails?.length) return {};
+      const data = await apiRequest('POST', '/contacts/check-batch', { emails });
+      return data ?? {};
+    }
+
+    case 'SCAN_INBOX': {
+      const data = await apiRequest('POST', '/gmail/scan');
+      await updateBadge();
+      return data;
+    }
+
+    case 'PURCHASE_CREDITS': {
+      const data = await apiRequest('POST', '/credits/purchase', {
+        packageId: msg.packageId || 'starter',
+      });
+      if (data?.checkoutUrl) chrome.tabs.create({ url: data.checkoutUrl });
+      return data;
+    }
+
+    default:
+      return null;
+  }
+}

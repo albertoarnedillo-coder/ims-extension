@@ -12,7 +12,8 @@
   "host_permissions": [
     "https://mail.google.com/*",
     "https://www.googleapis.com/*",
-    "http://localhost:3000/*"
+    "http://localhost:3000/*",
+    "http://172.20.149.114:3000/*"
   ],
   "oauth2": {
     "client_id": "113835763265-2040ue2jspeaat2vqdvk1urakmpiftj7.apps.googleusercontent.com",
