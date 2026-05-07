@@ -1,28 +1,25 @@
 const API_BASE = 'http://172.20.149.114:3000/api';
 
-// ─── View management ──────────────────────────────────────────────────────────
-const views = {
-  loading: document.getElementById('view-loading'),
-  login:   document.getElementById('view-login'),
-  main:    document.getElementById('view-main'),
-};
+// ─── DOM helpers ──────────────────────────────────────────────────────────────
+function $(id)       { return document.getElementById(id); }
+function show(el)    { el?.classList.remove('hidden'); }
+function hide(el)    { el?.classList.add('hidden'); }
 
 function showView(name) {
-  Object.values(views).forEach(v => v.classList.add('hidden'));
-  views[name].classList.remove('hidden');
+  ['view-loading', 'view-login', 'view-main'].forEach(id => hide($(id)));
+  show($(name));
 }
 
-// ─── Background messaging ──────────────────────────────────────────────────────
+// ─── Background messaging ─────────────────────────────────────────────────────
 function bgMessage(msg) {
   return new Promise(resolve => chrome.runtime.sendMessage(msg, resolve));
 }
 
-// ─── Login flow ───────────────────────────────────────────────────────────────
+// ─── Login ────────────────────────────────────────────────────────────────────
 async function login() {
-  const errorEl = document.getElementById('login-error');
-  errorEl.classList.add('hidden');
+  const errorEl = $('login-error');
+  hide(errorEl);
 
-  // 1. Get Google auth code via Chrome identity
   let code;
   try {
     const clientId    = '113835763265-ptv5hp61pc02re7asuad015mebgr4m91.apps.googleusercontent.com';
@@ -42,16 +39,14 @@ async function login() {
       });
     });
 
-    const params = new URLSearchParams(new URL(responseUrl).search);
-    code = params.get('code');
+    code = new URLSearchParams(new URL(responseUrl).search).get('code');
     if (!code) throw new Error('No authorization code');
   } catch {
-    errorEl.textContent = 'Google sign-in was cancelled or failed.';
-    errorEl.classList.remove('hidden');
+    if (errorEl) errorEl.textContent = 'Google sign-in was cancelled or failed.';
+    show(errorEl);
     return;
   }
 
-  // 2. Exchange code for IMS tokens
   try {
     const res = await fetch(`${API_BASE}/auth/google`, {
       method:  'POST',
@@ -61,100 +56,89 @@ async function login() {
     if (!res.ok) throw new Error(`Server error: ${res.status}`);
 
     const { accessToken, refreshToken, user } = await res.json();
-
-    // Store in background service worker
     await bgMessage({ type: 'LOGIN', accessToken, refreshToken, user });
-
     await renderMain(user);
   } catch {
-    errorEl.textContent = 'Could not connect to IMS backend. Is the server running?';
-    errorEl.classList.remove('hidden');
+    if (errorEl) errorEl.textContent = 'Could not connect to IMS backend. Is the server running?';
+    show(errorEl);
   }
 }
 
 // ─── Logout ───────────────────────────────────────────────────────────────────
 async function logout() {
   await bgMessage({ type: 'LOGOUT' });
-  showView('login');
+  showView('view-login');
 }
 
 // ─── Main view ────────────────────────────────────────────────────────────────
 async function renderMain(user) {
-  showView('main');
+  showView('view-main');
 
-  // Render name + avatar immediately from stored user object
-  document.getElementById('user-name').textContent = user?.name || user?.email || 'User';
-  const avatarEl = document.getElementById('user-avatar');
-  if (user?.avatar_url || user?.picture) {
-    avatarEl.src = user.avatar_url || user.picture;
-    avatarEl.alt = user?.name || '';
-  }
+  const nameEl = $('user-name');
+  if (nameEl) nameEl.textContent = user?.name || user?.email || 'User';
+
+  const avatarEl = $('user-avatar');
+  const src = user?.avatar_url || user?.picture;
+  if (avatarEl && src) { avatarEl.src = src; avatarEl.alt = user?.name || ''; }
 
   await loadStats();
 }
 
 async function loadStats() {
-  // Dashboard gives us everything in one call
   const dash = await bgMessage({ type: 'GET_DASHBOARD' });
   if (!dash) return;
-
-  document.getElementById('stat-credits').textContent    = dash.credits?.balance ?? '—';
-  document.getElementById('stat-unknown').textContent    = dash.contacts?.unknown ?? '—';
-  document.getElementById('stat-suspicious').textContent = dash.contacts?.suspicious ?? '—';
+  const set = (id, val) => { const el = $(id); if (el) el.textContent = val; };
+  set('stat-credits',    dash.credits?.balance    ?? '—');
+  set('stat-unknown',    dash.contacts?.unknown   ?? '—');
+  set('stat-suspicious', dash.contacts?.suspicious ?? '—');
 }
 
 // ─── Scan inbox ───────────────────────────────────────────────────────────────
 async function scanInbox() {
-  const btn     = document.getElementById('btn-scan');
-  const spinner = document.getElementById('scan-spinner');
-  btn.disabled  = true;
-  spinner.classList.remove('hidden');
+  const btn     = $('btn-scan');
+  const spinner = $('scan-spinner');
+  if (!btn) return;
+
+  btn.disabled = true;
+  show(spinner);
 
   const result = await bgMessage({ type: 'SCAN_INBOX' });
   await loadStats();
 
-  spinner.classList.add('hidden');
+  hide(spinner);
   btn.disabled = false;
 
   if (result) {
-    btn.textContent = `Scanned ${result.scanned ?? '?'} emails`;
-    setTimeout(() => {
-      btn.innerHTML = '';
-      const sp = document.createElement('span');
-      sp.id = 'scan-spinner';
-      sp.className = 'spinner hidden';
-      btn.appendChild(sp);
-      btn.appendChild(document.createTextNode('Scan Inbox'));
-    }, 2500);
+    const label = btn.querySelector('.btn-label') || btn;
+    const prev  = label.textContent;
+    label.textContent = `Scanned ${result.scanned ?? '?'} emails`;
+    setTimeout(() => { label.textContent = prev; }, 2500);
   }
 }
 
 // ─── Buy credits ─────────────────────────────────────────────────────────────
 async function buyCredits() {
   await bgMessage({ type: 'PURCHASE_CREDITS', packageId: 'starter' });
-  // Background opens the Stripe checkout URL in a new tab
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
-  showView('loading');
-  document.getElementById('login-error').classList.add('hidden');
+  showView('view-loading');
+  hide($('login-error'));
 
   const { authenticated, user } = await bgMessage({ type: 'GET_AUTH_STATUS' });
 
-  if (!authenticated) {
-    showView('login');
-    return;
-  }
-
+  if (!authenticated) { showView('view-login'); return; }
   await renderMain(user);
 }
 
-// ─── Event listeners ──────────────────────────────────────────────────────────
-document.getElementById('btn-login').addEventListener('click', login);
-document.getElementById('btn-logout').addEventListener('click', logout);
-document.getElementById('btn-scan').addEventListener('click', scanInbox);
-document.getElementById('btn-options').addEventListener('click', () => chrome.runtime.openOptionsPage());
-document.getElementById('btn-buy').addEventListener('click', buyCredits);
+// ─── Wire up (inside DOMContentLoaded so DOM is guaranteed ready) ─────────────
+document.addEventListener('DOMContentLoaded', () => {
+  $('btn-login')  ?.addEventListener('click', login);
+  $('btn-logout') ?.addEventListener('click', logout);
+  $('btn-scan')   ?.addEventListener('click', scanInbox);
+  $('btn-options')?.addEventListener('click', () => chrome.runtime.openOptionsPage());
+  $('btn-buy')    ?.addEventListener('click', buyCredits);
 
-init();
+  init();
+});
